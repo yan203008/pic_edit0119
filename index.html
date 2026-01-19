@@ -382,7 +382,7 @@
                     <!-- 画布 -->
                     <div id="preview-canvas" ref="canvasRef" @click.self="deselect"
                         :style="{
-                            transform: `scale(${scale})`,
+                            transform: scale === 1 ? 'none' : `scale(${scale})`,
                             transformOrigin: 'top left'
                         }">
                         
@@ -406,7 +406,7 @@
 
                         <!-- 1. 背景拼接流 -->
                         <div class="flex flex-col w-full min-h-full bg-white flex-1">
-                            <img v-for="img in bgImages" :key="img.id" :src="img.url" class="w-full block object-contain">
+                            <img v-for="img in bgImages" :key="img.id" :src="img.url" class="w-full block h-auto">
                             <!-- 如果没有背景图，显示占位 -->
                             <div v-if="bgImages.length === 0 && !headerConfig.show" class="flex-1 flex items-center justify-center text-gray-300 flex-col gap-2 min-h-[400px]">
                                 <i class="ph ph-image text-4xl"></i>
@@ -599,20 +599,34 @@
                     if (!file) return;
                     const url = URL.createObjectURL(file);
                     
-                    // 添加到画布
-                    const newItem = {
-                        id: generateId(),
-                        type: 'sticker',
-                        url: url,
-                        x: 50,
-                        y: 50 + (overlayItems.value.length * 20), // 简单的错位
-                        width: 100,
-                        height: 100,
-                        opacity: 1
+                    const img = new Image();
+                    img.onload = () => {
+                        const aspect = img.width / img.height;
+                        // 默认最长边 150px
+                        let w = 150;
+                        let h = 150;
+                        if (aspect >= 1) {
+                            h = 150 / aspect;
+                        } else {
+                            w = 150 * aspect;
+                        }
+
+                        // 添加到画布
+                        const newItem = {
+                            id: generateId(),
+                            type: 'sticker',
+                            url: url,
+                            x: 50,
+                            y: 50 + (overlayItems.value.length * 20),
+                            width: w,
+                            height: h,
+                            opacity: 1
+                        };
+                        overlayItems.value.push(newItem);
+                        stickers.value.push(newItem);
+                        selectedId.value = newItem.id;
                     };
-                    overlayItems.value.push(newItem);
-                    stickers.value.push(newItem); // 记录一下，如果需要复用
-                    selectedId.value = newItem.id;
+                    img.src = url;
                     
                     e.target.value = '';
                 };
@@ -693,8 +707,9 @@
 
                 const onDragMove = (e) => {
                     if (!isDragging || !currentItem) return;
-                    const dx = e.clientX - startX;
-                    const dy = e.clientY - startY;
+                    // 修正：除以缩放比例，确保拖拽跟随鼠标
+                    const dx = (e.clientX - startX) / scale.value;
+                    const dy = (e.clientY - startY) / scale.value;
                     currentItem.x = initialLeft + dx;
                     currentItem.y = initialTop + dy;
                 };
@@ -741,14 +756,24 @@
 
                 const onResizeMove = (e) => {
                     if (!isResizing || !currentItem) return;
-                    const dx = e.clientX - startX;
-                    const dy = e.clientY - startY;
+                    // 修正：除以缩放比例
+                    const dx = (e.clientX - startX) / scale.value;
+                    const dy = (e.clientY - startY) / scale.value;
                     
-                    // 简单调整宽高
                     if (currentItem.type === 'sticker') {
-                        // 保持比例？暂不强制
-                        currentItem.width = Math.max(20, initialWidth + dx);
-                        currentItem.height = Math.max(20, initialHeight + dy);
+                        // 锁定宽高比
+                        const ratio = initialWidth / initialHeight;
+                        
+                        // 智能判断：以变化量大的方向为准，或者水平移动为主
+                        if (Math.abs(dx) > Math.abs(dy)) {
+                            const newWidth = Math.max(20, initialWidth + dx);
+                            currentItem.width = newWidth;
+                            currentItem.height = newWidth / ratio;
+                        } else {
+                            const newHeight = Math.max(20, initialHeight + dy);
+                            currentItem.height = newHeight;
+                            currentItem.width = newHeight * ratio;
+                        }
                     } else {
                         // 文本通常只调整宽度
                         currentItem.width = Math.max(50, initialWidth + dx);
@@ -774,18 +799,23 @@
                     // 临时重置缩放，确保导出清晰度
                     const currentScale = scale.value;
                     scale.value = 1.0;
+                    window.scrollTo(0, 0); // 确保滚动回顶部
                     
                     // 等待 DOM 更新
                     await Vue.nextTick();
 
                     // 等待一小会儿确保渲染完成 (特别是如果有 transform 动画)
-                    await new Promise(r => setTimeout(r, 300));
+                    await new Promise(r => setTimeout(r, 500));
 
                     try {
                         const canvas = await html2canvas(canvasRef.value, {
                             scale: 2, // 高清
                             useCORS: true,
-                            backgroundColor: null
+                            backgroundColor: null,
+                            scrollX: 0,
+                            scrollY: 0,
+                            x: 0,
+                            y: 0
                         });
                         
                         const link = document.createElement('a');
