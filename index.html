@@ -1,0 +1,838 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>探店图文编辑器</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
+    <!-- 引入 Phosphor Icons -->
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    
+    <!-- 引入 Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Long+Cang&family=Ma+Shan+Zheng&family=Noto+Sans+SC:wght@400;700&family=Noto+Serif+SC:wght@400;700&family=ZCOOL+KuaiLe&display=swap" rel="stylesheet">
+
+    <style>
+        /* 引入本地字体 */
+        @font-face {
+            font-family: 'WenJinMincho';
+            src: url('font/文津宋体2.000/WenJinMincho-TTF/WenJinMinchoP0-Regular.ttf') format('truetype');
+            font-weight: normal;
+            font-style: normal;
+        }
+
+        /* 自定义滚动条 */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f1f1; 
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1; 
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8; 
+        }
+
+        /* 选中态边框 */
+        .is-selected {
+            outline: 2px solid #3b82f6; /* blue-500 */
+        }
+        
+        /* 隐藏的文件输入 */
+        .file-input {
+            display: none;
+        }
+
+        /* 预览区容器 */
+        #preview-canvas {
+            width: 375px; /* 默认模拟手机宽度 */
+            min-height: 667px;
+            background-color: white;
+            position: relative;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            overflow: hidden; /* 防止溢出 */
+        }
+
+        /* 拖拽缩放控制点 */
+        .resize-handle {
+            width: 12px;
+            height: 12px;
+            background-color: #3b82f6;
+            border: 2px solid white;
+            border-radius: 50%;
+            position: absolute;
+            bottom: -6px;
+            right: -6px;
+            cursor: nwse-resize;
+            z-index: 20;
+        }
+        
+        .delete-btn {
+            position: absolute;
+            top: -10px;
+            left: -10px;
+            background: #ef4444;
+            color: white;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            z-index: 20;
+            font-size: 12px;
+        }
+
+        .draggable-item {
+            position: absolute;
+            cursor: move;
+            user-select: none;
+        }
+        
+        /* 虚线边框用于未选中的可编辑元素 (可选) */
+        .draggable-item:hover {
+            outline: 1px dashed #94a3b8;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 h-screen w-screen overflow-hidden text-slate-800">
+    <div id="app" class="flex h-full">
+        <!-- 左侧操作区 -->
+        <div class="w-96 bg-white border-r border-gray-200 flex flex-col h-full flex-shrink-0 z-10 shadow-lg">
+            <div class="p-4 border-b border-gray-200 bg-slate-50">
+                <h1 class="text-xl font-bold flex items-center gap-2">
+                    <i class="ph ph-image-square text-blue-600"></i>
+                    探店编辑器
+                </h1>
+                <p class="text-xs text-gray-500 mt-1">拖拽、拼接、分享</p>
+            </div>
+
+            <div class="flex-1 overflow-y-auto p-4 space-y-6">
+                
+                <!-- 1. 顶部标题设置 (新增) -->
+                <section>
+                    <div class="flex justify-between items-center mb-2">
+                        <h2 class="font-semibold text-sm text-gray-700">1. 顶部标题</h2>
+                        <div class="flex items-center gap-2">
+                             <label class="text-xs text-gray-500">显示</label>
+                             <input type="checkbox" v-model="headerConfig.show" class="toggle-checkbox">
+                        </div>
+                    </div>
+                    
+                    <div v-if="headerConfig.show" class="bg-gray-50 p-3 rounded-lg border border-gray-200 space-y-3">
+                         <div>
+                            <label class="text-xs text-gray-500 block mb-1">标题内容 (支持回车换行)</label>
+                            <textarea v-model="headerConfig.text" rows="2" class="w-full text-sm p-1 border rounded"></textarea>
+                        </div>
+                        <div>
+                            <label class="text-xs text-gray-500 block mb-1">字体</label>
+                            <select v-model="headerConfig.fontFamily" class="w-full text-sm p-1 border rounded">
+                                <option v-for="font in fontOptions" :key="font.value" :value="font.value" :style="{ fontFamily: font.value }">
+                                    {{ font.label }}
+                                </option>
+                            </select>
+                        </div>
+                        <div class="grid grid-cols-2 gap-2">
+                            <div>
+                                <label class="text-xs text-gray-500 block mb-1">高度 (px)</label>
+                                <input type="number" v-model.number="headerConfig.height" class="w-full text-sm p-1 border rounded">
+                            </div>
+                            <div>
+                                <label class="text-xs text-gray-500 block mb-1">字号</label>
+                                <input type="number" v-model.number="headerConfig.fontSize" class="w-full text-sm p-1 border rounded">
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-2 gap-2">
+                            <div>
+                                <label class="text-xs text-gray-500 block mb-1">对齐</label>
+                                <select v-model="headerConfig.textAlign" class="w-full text-sm p-1 border rounded">
+                                    <option value="left">靠左</option>
+                                    <option value="center">居中</option>
+                                    <option value="right">靠右</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="text-xs text-gray-500 block mb-1">粗细</label>
+                                <select v-model="headerConfig.fontWeight" class="w-full text-sm p-1 border rounded">
+                                    <option value="300">更细</option>
+                                    <option value="400">正常</option>
+                                    <option value="700">加粗</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-2 gap-2">
+                             <div>
+                                <label class="text-xs text-gray-500 block mb-1">水平偏移 ({{ headerConfig.offsetX }}px)</label>
+                                <input type="range" min="-150" max="150" v-model.number="headerConfig.offsetX" class="w-full">
+                             </div>
+                             <div>
+                                <label class="text-xs text-gray-500 block mb-1">垂直偏移 ({{ headerConfig.offsetY }}px)</label>
+                                <input type="range" min="-50" max="50" v-model.number="headerConfig.offsetY" class="w-full">
+                             </div>
+                        </div>
+                        <div class="grid grid-cols-2 gap-2">
+                            <div>
+                                <label class="text-xs text-gray-500 block mb-1">背景色</label>
+                                <input type="color" v-model="headerConfig.bgColor" class="w-full h-7 p-0 border rounded cursor-pointer">
+                            </div>
+                             <div>
+                                <label class="text-xs text-gray-500 block mb-1">文字色</label>
+                                <input type="color" v-model="headerConfig.textColor" class="w-full h-7 p-0 border rounded cursor-pointer">
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <hr class="border-gray-100">
+                
+                <!-- 2. 背景图片区 -->
+                <section>
+                    <div class="flex justify-between items-center mb-2">
+                        <h2 class="font-semibold text-sm text-gray-700">2. 拼接长图 (背景)</h2>
+                        <button @click="triggerFileInput('bgInput')" class="text-blue-600 text-xs hover:underline flex items-center">
+                            <i class="ph ph-plus mr-1"></i>添加图片
+                        </button>
+                        <input type="file" id="bgInput" class="file-input" multiple accept="image/*" @change="handleBgUpload">
+                    </div>
+                    
+                    <div class="space-y-2">
+                        <div v-for="(img, index) in bgImages" :key="img.id" class="flex items-center gap-2 bg-gray-50 p-2 rounded border border-gray-200 group hover:border-blue-300 transition-colors">
+                            <img :src="img.url" class="w-12 h-12 object-cover rounded bg-white">
+                            <div class="flex-1 min-w-0">
+                                <div class="text-xs text-gray-500 truncate">{{ img.name }}</div>
+                            </div>
+                            <div class="flex gap-1">
+                                <button @click="moveBg(index, -1)" :disabled="index === 0" class="p-1 hover:bg-gray-200 rounded disabled:opacity-30">
+                                    <i class="ph ph-arrow-up"></i>
+                                </button>
+                                <button @click="moveBg(index, 1)" :disabled="index === bgImages.length - 1" class="p-1 hover:bg-gray-200 rounded disabled:opacity-30">
+                                    <i class="ph ph-arrow-down"></i>
+                                </button>
+                                <button @click="removeBg(index)" class="p-1 hover:bg-red-100 text-red-500 rounded">
+                                    <i class="ph ph-trash"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div v-if="bgImages.length === 0" class="text-center py-8 border-2 border-dashed border-gray-200 rounded-lg text-gray-400 text-sm">
+                            暂无背景图<br>点击上方添加
+                        </div>
+                    </div>
+                </section>
+
+                <hr class="border-gray-100">
+
+                <!-- 3. 前置贴纸区 -->
+                <section>
+                    <div class="flex justify-between items-center mb-2">
+                        <h2 class="font-semibold text-sm text-gray-700">3. 贴纸/水印</h2>
+                        <button @click="triggerFileInput('stickerInput')" class="text-blue-600 text-xs hover:underline flex items-center">
+                            <i class="ph ph-plus mr-1"></i>添加贴纸
+                        </button>
+                        <input type="file" id="stickerInput" class="file-input" accept="image/*" @change="handleStickerUpload">
+                    </div>
+                    <!-- 这里可以放一个预设贴纸库，或者只显示已添加的列表 -->
+                    <div class="grid grid-cols-4 gap-2">
+                         <!-- 简单展示已添加的贴纸缩略图，点击可以选中画布上的对应元素 -->
+                         <div v-for="sticker in stickers" :key="sticker.id" 
+                              @click="selectItem(sticker.id)"
+                              class="aspect-square border rounded cursor-pointer overflow-hidden relative"
+                              :class="{'ring-2 ring-blue-500': selectedId === sticker.id}">
+                             <img :src="sticker.url" class="w-full h-full object-contain">
+                         </div>
+                    </div>
+
+                    <!-- 贴纸属性编辑 -->
+                    <div v-if="selectedItem && selectedItem.type === 'sticker'" class="mt-4 bg-blue-50 p-3 rounded-lg border border-blue-100 space-y-3">
+                        <div class="text-xs font-semibold text-gray-700 mb-2">当前选中贴纸设置</div>
+                        <div>
+                            <label class="text-xs text-gray-500 block mb-1">透明度 ({{ Math.round((selectedItem.opacity || 1) * 100) }}%)</label>
+                            <input type="range" min="0" max="1" step="0.1" v-model.number="selectedItem.opacity" class="w-full">
+                        </div>
+                        <div class="flex justify-between pt-2">
+                            <button @click="deleteSelected" class="text-red-500 text-xs flex items-center hover:underline">
+                                <i class="ph ph-trash mr-1"></i> 删除贴纸
+                            </button>
+                        </div>
+                    </div>
+                </section>
+
+                <hr class="border-gray-100">
+
+                <!-- 4. 文字区 -->
+                <section>
+                    <div class="flex justify-between items-center mb-2">
+                        <h2 class="font-semibold text-sm text-gray-700">4. 文字内容</h2>
+                        <button @click="addText" class="bg-blue-50 text-blue-600 px-3 py-1 rounded text-xs hover:bg-blue-100 font-medium">
+                            + 新增文本框
+                        </button>
+                    </div>
+
+                    <!-- 当前选中元素的属性编辑 (如果是文本) -->
+                    <div v-if="selectedItem && selectedItem.type === 'text'" class="bg-blue-50 p-3 rounded-lg border border-blue-100 space-y-3">
+                        <div>
+                            <label class="text-xs text-gray-500 block mb-1">内容</label>
+                            <textarea v-model="selectedItem.content" rows="2" class="w-full text-sm p-1 border rounded"></textarea>
+                        </div>
+                        <div>
+                            <label class="text-xs text-gray-500 block mb-1">字体</label>
+                            <select v-model="selectedItem.fontFamily" class="w-full text-sm p-1 border rounded">
+                                 <option v-for="font in fontOptions" :key="font.value" :value="font.value" :style="{ fontFamily: font.value }">
+                                     {{ font.label }}
+                                 </option>
+                             </select>
+                         </div>
+                         <div class="grid grid-cols-2 gap-2">
+                            <div>
+                                <label class="text-xs text-gray-500 block mb-1">对齐</label>
+                                <select v-model="selectedItem.textAlign" class="w-full text-sm p-1 border rounded">
+                                    <option value="left">靠左</option>
+                                    <option value="center">居中</option>
+                                    <option value="right">靠右</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="text-xs text-gray-500 block mb-1">粗细</label>
+                                <select v-model="selectedItem.fontWeight" class="w-full text-sm p-1 border rounded">
+                                    <option value="300">更细</option>
+                                    <option value="400">正常</option>
+                                    <option value="700">加粗</option>
+                                </select>
+                            </div>
+                        </div>
+                         <div class="grid grid-cols-2 gap-2">
+                            <div>
+                                <label class="text-xs text-gray-500 block mb-1">字号 (px)</label>
+                                <input type="number" v-model.number="selectedItem.fontSize" class="w-full text-sm p-1 border rounded">
+                            </div>
+                            <div>
+                                <label class="text-xs text-gray-500 block mb-1">颜色</label>
+                                <input type="color" v-model="selectedItem.color" class="w-full h-7 p-0 border rounded cursor-pointer">
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-2 gap-2">
+                            <div>
+                                <label class="text-xs text-gray-500 block mb-1">背景色</label>
+                                <div class="flex items-center gap-1">
+                                    <input type="checkbox" v-model="selectedItem.hasBackground">
+                                    <input type="color" v-model="selectedItem.backgroundColor" :disabled="!selectedItem.hasBackground" class="flex-1 h-7 p-0 border rounded cursor-pointer disabled:opacity-50">
+                                </div>
+                            </div>
+                             <div>
+                                <label class="text-xs text-gray-500 block mb-1">圆角</label>
+                                <input type="range" min="0" max="20" v-model.number="selectedItem.borderRadius" class="w-full">
+                            </div>
+                        </div>
+                        <div>
+                             <label class="text-xs text-gray-500 block mb-1">背景高度/内边距 ({{ selectedItem.paddingY || 8 }}px)</label>
+                             <input type="range" min="0" max="50" v-model.number="selectedItem.paddingY" class="w-full">
+                        </div>
+                        <div>
+                            <label class="text-xs text-gray-500 block mb-1">背景透明度 ({{ Math.round((selectedItem.opacity || 1) * 100) }}%)</label>
+                            <input type="range" min="0" max="1" step="0.1" v-model.number="selectedItem.opacity" class="w-full">
+                        </div>
+                        <div class="flex justify-between pt-2">
+                            <button @click="deleteSelected" class="text-red-500 text-xs flex items-center hover:underline">
+                                <i class="ph ph-trash mr-1"></i> 删除
+                            </button>
+                        </div>
+                    </div>
+                    <div v-else class="text-xs text-gray-400 text-center py-4">
+                        选中画布上的文本以编辑属性
+                    </div>
+                </section>
+            </div>
+            
+            <div class="p-4 border-t border-gray-200 bg-gray-50">
+                <button @click="exportImage" class="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-lg font-medium flex items-center justify-center gap-2 shadow-sm transition-all active:scale-95">
+                    <i class="ph ph-download-simple text-lg"></i>
+                    生成并保存图片
+                </button>
+            </div>
+        </div>
+
+        <!-- 右侧预览区 -->
+        <div class="flex-1 bg-gray-200 flex flex-col items-center p-8 overflow-hidden relative" @click.self="deselect">
+            
+            <!-- 缩放控制条 -->
+            <div class="absolute top-4 right-4 z-50 bg-white shadow-md rounded-lg p-2 flex items-center gap-2">
+                <button @click="scale = Math.max(0.1, scale - 0.1)" class="w-6 h-6 flex items-center justify-center hover:bg-gray-100 rounded text-gray-600">-</button>
+                <span class="text-xs font-mono w-12 text-center">{{ Math.round(scale * 100) }}%</span>
+                <button @click="scale = Math.min(3, scale + 0.1)" class="w-6 h-6 flex items-center justify-center hover:bg-gray-100 rounded text-gray-600">+</button>
+                <button @click="scale = 1.0" class="text-xs text-blue-500 hover:underline ml-1">重置</button>
+            </div>
+
+            <div class="flex-1 overflow-auto w-full flex justify-center custom-scroll" @click.self="deselect">
+                <!-- 缩放容器：用于占位和触发滚动 -->
+                 <div :style="{ 
+                    width: (375 * scale) + 'px', 
+                    height: (canvasHeight * scale) + 'px',
+                    minHeight: (667 * scale) + 'px',
+                    position: 'relative',
+                    transition: 'width 0.2s, height 0.2s'
+                }" class="shrink-0 transition-all duration-200">
+                    
+                    <!-- 画布 -->
+                    <div id="preview-canvas" ref="canvasRef" @click.self="deselect"
+                        :style="{
+                            transform: `scale(${scale})`,
+                            transformOrigin: 'top left'
+                        }">
+                        
+                        <!-- 0. 顶部标题栏 -->
+                        <div v-if="headerConfig.show" 
+                             class="w-full flex items-center justify-center px-4 text-center break-words shrink-0"
+                             :style="{
+                                 height: headerConfig.height + 'px',
+                                 backgroundColor: headerConfig.bgColor,
+                                 color: headerConfig.textColor,
+                                 fontSize: headerConfig.fontSize + 'px',
+                                 fontWeight: headerConfig.fontWeight,
+                                 textAlign: headerConfig.textAlign,
+                                 whiteSpace: 'pre-wrap',
+                                 fontFamily: headerConfig.fontFamily
+                             }">
+                             <div :style="{ transform: `translate(${headerConfig.offsetX || 0}px, ${headerConfig.offsetY || 0}px)` }">
+                                {{ headerConfig.text }}
+                             </div>
+                        </div>
+
+                        <!-- 1. 背景拼接流 -->
+                        <div class="flex flex-col w-full min-h-full bg-white flex-1">
+                            <img v-for="img in bgImages" :key="img.id" :src="img.url" class="w-full block object-contain">
+                            <!-- 如果没有背景图，显示占位 -->
+                            <div v-if="bgImages.length === 0 && !headerConfig.show" class="flex-1 flex items-center justify-center text-gray-300 flex-col gap-2 min-h-[400px]">
+                                <i class="ph ph-image text-4xl"></i>
+                                <span>添加背景图开始</span>
+                            </div>
+                        </div>
+
+                <!-- 2. 自由图层 (贴纸 & 文字) -->
+                <!-- 使用 transform 实现位置移动 -->
+                <div v-for="item in overlayItems" 
+                     :key="item.id"
+                     class="draggable-item"
+                     :class="{'is-selected': selectedId === item.id}"
+                     :style="{
+                         left: item.x + 'px',
+                         top: item.y + 'px',
+                         width: item.width ? item.width + 'px' : 'auto',
+                         height: item.height ? item.height + 'px' : 'auto',
+                         zIndex: 10
+                     }"
+                     @mousedown.stop="startDrag($event, item)"
+                >
+                    <!-- 删除按钮 (选中时显示) -->
+                    <div v-if="selectedId === item.id" class="delete-btn" @click.stop="deleteItem(item.id)">
+                        <i class="ph ph-x"></i>
+                    </div>
+
+                    <!-- 贴纸内容 -->
+                    <img v-if="item.type === 'sticker'" 
+                         :src="item.url" 
+                         class="w-full h-full object-contain pointer-events-none"
+                         :style="{ opacity: item.opacity !== undefined ? item.opacity : 1 }">
+
+                    <!-- 文本内容 -->
+                    <div v-if="item.type === 'text'" 
+                         class="break-words"
+                         :style="{
+                             fontSize: item.fontSize + 'px',
+                             color: item.color,
+                             backgroundColor: item.hasBackground ? hexToRgba(item.backgroundColor, item.opacity !== undefined ? item.opacity : 1) : 'transparent',
+                             borderRadius: item.borderRadius + 'px',
+                             minWidth: '50px',
+                             fontFamily: item.fontFamily,
+                             textAlign: item.textAlign,
+                             fontWeight: item.fontWeight,
+                             padding: (item.paddingY !== undefined ? item.paddingY : 8) + 'px 8px'
+                         }">
+                        {{ item.content }}
+                    </div>
+
+                    <!-- 缩放手柄 (选中时显示) -->
+                    <div v-if="selectedId === item.id && (item.type === 'sticker' || item.type === 'text')" 
+                         class="resize-handle"
+                         @mousedown.stop="startResize($event, item)">
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const { createApp, ref, computed, onMounted, onUnmounted } = Vue;
+
+        createApp({
+            setup() {
+                // 状态数据
+                const bgImages = ref([]);
+                const stickers = ref([]); // 只是存储源数据，实际渲染在 overlayItems
+                const overlayItems = ref([]); // 包含贴纸和文本
+                const selectedId = ref(null);
+                const canvasRef = ref(null);
+                
+                // 新增状态
+                const scale = ref(1.0);
+                const canvasHeight = ref(667); // 初始高度
+                const headerConfig = ref({
+                    show: false,
+                    text: '探店分享',
+                    height: 60,
+                    bgColor: '#ffffff',
+                    textColor: '#000000',
+                    fontSize: 18,
+                    fontFamily: 'Noto Sans SC',
+                    textAlign: 'center',
+                    fontWeight: '700',
+                    offsetX: 0,
+                    offsetY: 0
+                });
+
+                // 字体选项
+                const fontOptions = [
+                    { label: '文津宋体 (本地)', value: '"WenJinMincho", serif' },
+                    { label: '思源黑体 (默认)', value: '"Noto Sans SC", sans-serif' },
+                    { label: '思源宋体', value: '"Noto Serif SC", serif' },
+                    { label: '马善政 (书法)', value: '"Ma Shan Zheng", cursive' },
+                    { label: '站酷快乐体 (可爱)', value: '"ZCOOL KuaiLe", cursive' },
+                    { label: '龙苍 (草书)', value: '"Long Cang", cursive' },
+                    { label: '系统黑体', value: 'sans-serif' },
+                    { label: '系统宋体', value: 'serif' },
+                    { label: '系统楷体', value: 'KaiTi, "KaiTi", serif' }
+                ];
+
+                // 辅助函数：Hex 转 RGBA
+                const hexToRgba = (hex, alpha) => {
+                    if (!hex) return 'transparent';
+                    // 如果已经是 rgba 或 rgb 格式，直接返回（虽然 input color 都是 hex）
+                    if (hex.startsWith('rgb')) return hex;
+                    
+                    let r = 0, g = 0, b = 0;
+                    // Handle #RRGGBB
+                    if (hex.length === 7) {
+                        r = parseInt(hex.slice(1, 3), 16);
+                        g = parseInt(hex.slice(3, 5), 16);
+                        b = parseInt(hex.slice(5, 7), 16);
+                    } 
+                    // Handle #RGB
+                    else if (hex.length === 4) {
+                        r = parseInt(hex[1] + hex[1], 16);
+                        g = parseInt(hex[2] + hex[2], 16);
+                        b = parseInt(hex[3] + hex[3], 16);
+                    }
+                    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+                };
+
+                // 监听画布高度变化
+                const updateCanvasHeight = () => {
+                    if (canvasRef.value) {
+                         // 使用 scrollHeight 或者 offsetHeight 获取真实高度
+                         // 但是 transform:scale 不会改变 offsetHeight，所以是安全的
+                         canvasHeight.value = canvasRef.value.scrollHeight;
+                    }
+                };
+                
+                // 使用 ResizeObserver 监听高度变化
+                let resizeObserver = null;
+                onMounted(() => {
+                    if (canvasRef.value) {
+                        resizeObserver = new ResizeObserver(() => {
+                            updateCanvasHeight();
+                        });
+                        resizeObserver.observe(canvasRef.value);
+                    }
+                });
+                
+                onUnmounted(() => {
+                    if (resizeObserver) resizeObserver.disconnect();
+                });
+
+                // 辅助函数：生成ID
+                const generateId = () => Date.now().toString(36) + Math.random().toString(36).substr(2);
+
+                // 计算属性：当前选中的项
+                const selectedItem = computed(() => {
+                    return overlayItems.value.find(i => i.id === selectedId.value);
+                });
+
+                // 方法：上传背景图
+                const handleBgUpload = (e) => {
+                    const files = Array.from(e.target.files);
+                    files.forEach(file => {
+                        const url = URL.createObjectURL(file);
+                        bgImages.value.push({
+                            id: generateId(),
+                            url: url,
+                            name: file.name
+                        });
+                    });
+                    e.target.value = ''; // 重置 input
+                };
+
+                // 方法：移动背景图顺序
+                const moveBg = (index, delta) => {
+                    const newIndex = index + delta;
+                    if (newIndex >= 0 && newIndex < bgImages.value.length) {
+                        const temp = bgImages.value[index];
+                        bgImages.value[index] = bgImages.value[newIndex];
+                        bgImages.value[newIndex] = temp;
+                    }
+                };
+
+                // 方法：删除背景图
+                const removeBg = (index) => {
+                    bgImages.value.splice(index, 1);
+                };
+
+                // 方法：上传贴纸
+                const handleStickerUpload = (e) => {
+                    const file = e.target.files[0];
+                    if (!file) return;
+                    const url = URL.createObjectURL(file);
+                    
+                    // 添加到画布
+                    const newItem = {
+                        id: generateId(),
+                        type: 'sticker',
+                        url: url,
+                        x: 50,
+                        y: 50 + (overlayItems.value.length * 20), // 简单的错位
+                        width: 100,
+                        height: 100,
+                        opacity: 1
+                    };
+                    overlayItems.value.push(newItem);
+                    stickers.value.push(newItem); // 记录一下，如果需要复用
+                    selectedId.value = newItem.id;
+                    
+                    e.target.value = '';
+                };
+
+                // 方法：添加文本
+                const addText = () => {
+                    const newItem = {
+                        id: generateId(),
+                        type: 'text',
+                        content: '双击编辑文字',
+                        x: 50,
+                        y: 100 + (overlayItems.value.length * 20),
+                        fontSize: 16,
+                        color: '#000000',
+                        hasBackground: true,
+                        backgroundColor: '#ffffff',
+                        borderRadius: 4,
+                        width: null, // 文本宽度自适应，或者设定宽度
+                        height: null,
+                        opacity: 1,
+                        fontFamily: '"Noto Sans SC", sans-serif',
+                        textAlign: 'left',
+                        fontWeight: '400',
+                        paddingY: 8
+                    };
+                    overlayItems.value.push(newItem);
+                    selectedId.value = newItem.id;
+                };
+
+                // 方法：选中项
+                const selectItem = (id) => {
+                    selectedId.value = id;
+                };
+
+                // 方法：取消选中
+                const deselect = () => {
+                    selectedId.value = null;
+                };
+
+                const deleteSelected = () => {
+                    if (selectedId.value) {
+                        deleteItem(selectedId.value);
+                    }
+                };
+
+                const deleteItem = (id) => {
+                    overlayItems.value = overlayItems.value.filter(i => i.id !== id);
+                    if (selectedId.value === id) selectedId.value = null;
+                };
+
+                // --- 拖拽与缩放逻辑 ---
+                let isDragging = false;
+                let isResizing = false;
+                let startX = 0;
+                let startY = 0;
+                let initialLeft = 0;
+                let initialTop = 0;
+                let initialWidth = 0;
+                let initialHeight = 0;
+                let currentItem = null;
+
+                const startDrag = (e, item) => {
+                    // 如果点击的是 resize handle，不触发 drag
+                    if (e.target.classList.contains('resize-handle') || e.target.classList.contains('delete-btn')) return;
+
+                    e.preventDefault();
+                    selectItem(item.id);
+                    isDragging = true;
+                    currentItem = item;
+                    startX = e.clientX;
+                    startY = e.clientY;
+                    initialLeft = item.x;
+                    initialTop = item.y;
+
+                    document.addEventListener('mousemove', onDragMove);
+                    document.addEventListener('mouseup', onDragEnd);
+                };
+
+                const onDragMove = (e) => {
+                    if (!isDragging || !currentItem) return;
+                    const dx = e.clientX - startX;
+                    const dy = e.clientY - startY;
+                    currentItem.x = initialLeft + dx;
+                    currentItem.y = initialTop + dy;
+                };
+
+                const onDragEnd = () => {
+                    isDragging = false;
+                    currentItem = null;
+                    document.removeEventListener('mousemove', onDragMove);
+                    document.removeEventListener('mouseup', onDragEnd);
+                };
+
+                const startResize = (e, item) => {
+                    e.preventDefault();
+                    e.stopPropagation(); // 阻止冒泡防止触发 drag
+                    isResizing = true;
+                    currentItem = item;
+                    startX = e.clientX;
+                    startY = e.clientY;
+                    
+                    // 获取当前实际宽高 (如果是文本，width可能为null)
+                    // 这里为了简单，我们假设 sticker 有 width/height， text 也有（如果拖拽缩放的话）
+                    // 对于文本，通常缩放意味着改变 width (如果是自动换行) 或者 字体大小？
+                    // 简化版：Resize 只改变 width/height 容器大小。
+                    // 实际上对于图片，我们需要改变 width/height。
+                    // 对于文本，我们改变 width，height auto?
+                    
+                    // 简单起见，我们读取 DOM 元素的当前尺寸作为初始值
+                    // 但数据里有 width/height。
+                    // 如果是新创建的文本，width 是 null (auto)。
+                    // 我们需要获取当前计算后的 px 值。
+                    // 由于 ref 不好获取对应 DOM，我们暂时只支持已设置 width 的缩放，或者初始化 width。
+                    
+                    // 为了体验更好，我们在 startResize 时去获取一下 DOM 尺寸
+                    // 但这里没办法直接获取。我们给 item 设置初始默认值吧。
+                    if (!item.width) item.width = 150; 
+                    if (!item.height && item.type === 'sticker') item.height = 150;
+
+                    initialWidth = item.width;
+                    initialHeight = item.height;
+
+                    document.addEventListener('mousemove', onResizeMove);
+                    document.addEventListener('mouseup', onResizeEnd);
+                };
+
+                const onResizeMove = (e) => {
+                    if (!isResizing || !currentItem) return;
+                    const dx = e.clientX - startX;
+                    const dy = e.clientY - startY;
+                    
+                    // 简单调整宽高
+                    if (currentItem.type === 'sticker') {
+                        // 保持比例？暂不强制
+                        currentItem.width = Math.max(20, initialWidth + dx);
+                        currentItem.height = Math.max(20, initialHeight + dy);
+                    } else {
+                        // 文本通常只调整宽度
+                        currentItem.width = Math.max(50, initialWidth + dx);
+                        // 高度自适应
+                    }
+                };
+
+                const onResizeEnd = () => {
+                    isResizing = false;
+                    currentItem = null;
+                    document.removeEventListener('mousemove', onResizeMove);
+                    document.removeEventListener('mouseup', onResizeEnd);
+                };
+
+                // --- 导出功能 ---
+                const exportImage = async () => {
+                    if (!canvasRef.value) return;
+                    
+                    // 临时取消选中，避免边框被截取
+                    const lastSelected = selectedId.value;
+                    selectedId.value = null;
+
+                    // 临时重置缩放，确保导出清晰度
+                    const currentScale = scale.value;
+                    scale.value = 1.0;
+                    
+                    // 等待 DOM 更新
+                    await Vue.nextTick();
+
+                    // 等待一小会儿确保渲染完成 (特别是如果有 transform 动画)
+                    await new Promise(r => setTimeout(r, 300));
+
+                    try {
+                        const canvas = await html2canvas(canvasRef.value, {
+                            scale: 2, // 高清
+                            useCORS: true,
+                            backgroundColor: null
+                        });
+                        
+                        const link = document.createElement('a');
+                        link.download = 'pic_share_' + Date.now() + '.png';
+                        link.href = canvas.toDataURL('image/png');
+                        link.click();
+                    } catch (err) {
+                        console.error('Export failed', err);
+                        alert('导出失败，请重试');
+                    } finally {
+                        selectedId.value = lastSelected;
+                        scale.value = currentScale;
+                    }
+                };
+
+                // 文件 Input 触发器
+                const triggerFileInput = (id) => {
+                    document.getElementById(id).click();
+                };
+
+                return {
+                    bgImages,
+                    overlayItems,
+                    stickers,
+                    selectedId,
+                    selectedItem,
+                    canvasRef,
+                    handleBgUpload,
+                    moveBg,
+                    removeBg,
+                    handleStickerUpload,
+                    addText,
+                    selectItem,
+                    deselect,
+                    deleteSelected,
+                    deleteItem,
+                    startDrag,
+                    startResize,
+                    exportImage,
+                    triggerFileInput,
+                    scale,
+                    headerConfig,
+                    fontOptions,
+                    hexToRgba
+                };
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>
