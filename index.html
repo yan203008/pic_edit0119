@@ -2,20 +2,13 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <script>
-        window.onerror = function(msg, url, line, col, error) {
-            // 忽略 ResizeObserver 循环限制错误
-            if (msg.includes('ResizeObserver loop limit exceeded')) return;
-            alert("系统检测到错误，请截图发给顾问：\n" + msg + "\n" + (url ? url.split('/').pop() : 'unknown') + " 第 " + line + " 行");
-        };
-    </script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>探店图文编辑器</title>
-    <!-- 使用本地资源，解决网络问题 -->
-    <link href="css/tailwind.min.css" rel="stylesheet">
-    <script src="js/vue.global.js"></script>
-    <script src="js/html2canvas.min.js"></script>
-    <!-- 移除 Phosphor Icons，改用内联 SVG -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
+    <!-- 引入 Phosphor Icons -->
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
     
     <!-- 引入 Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -137,7 +130,7 @@
                     <div v-if="headerConfig.show" class="bg-gray-50 p-3 rounded-lg border border-gray-200 space-y-3">
                          <div>
                             <label class="text-xs text-gray-500 block mb-1">标题内容 (支持回车换行)</label>
-                            <textarea v-model="headerConfig.text" rows="4" class="w-full text-sm p-1 border rounded"></textarea>
+                            <textarea v-model="headerConfig.text" rows="2" class="w-full text-sm p-1 border rounded"></textarea>
                         </div>
                         <div>
                             <label class="text-xs text-gray-500 block mb-1">字体</label>
@@ -149,20 +142,29 @@
                         </div>
                         <div class="grid grid-cols-2 gap-2">
                             <div>
-                                <label class="text-xs text-gray-500 block mb-1">高度 ({{ headerConfig.height ? headerConfig.height + 'px' : '自适应' }})</label>
-                                <div class="flex items-center gap-1">
-                                    <input type="range" min="30" max="300" v-model.number="headerConfig.height" class="flex-1" :disabled="!headerConfig.height" @input="if(!headerConfig.height) headerConfig.height = 100">
-                                    <button @click="headerConfig.height = null" class="text-xs px-1 py-0.5 bg-gray-200 rounded hover:bg-gray-300" title="重置为自适应">Auto</button>
+                                <div class="flex justify-between items-center mb-1">
+                                    <label class="text-xs text-gray-500">高度 ({{ headerConfig.height }}px)</label>
+                                    <div class="flex items-center gap-1">
+                                        <input type="checkbox" v-model="headerConfig.isAutoHeight" id="autoHeight">
+                                        <label for="autoHeight" class="text-xs text-blue-600 cursor-pointer">自适应</label>
+                                    </div>
                                 </div>
+                                <input type="range" min="20" max="500" v-model.number="headerConfig.height" :disabled="headerConfig.isAutoHeight" class="w-full disabled:opacity-50">
                             </div>
                             <div>
                                 <label class="text-xs text-gray-500 block mb-1">字号</label>
                                 <input type="number" v-model.number="headerConfig.fontSize" class="w-full text-sm p-1 border rounded">
                             </div>
                         </div>
-                        <div>
-                             <label class="text-xs text-gray-500 block mb-1">行间距 ({{ headerConfig.lineHeight }})</label>
-                             <input type="range" min="1.0" max="3.0" step="0.1" v-model.number="headerConfig.lineHeight" class="w-full">
+                        <div class="grid grid-cols-2 gap-2">
+                             <div>
+                                <label class="text-xs text-gray-500 block mb-1">行间距 ({{ headerConfig.lineHeight }})</label>
+                                <input type="range" min="1" max="3" step="0.1" v-model.number="headerConfig.lineHeight" class="w-full">
+                             </div>
+                             <div>
+                                <label class="text-xs text-gray-500 block mb-1">段间距 ({{ headerConfig.paragraphSpacing }}px)</label>
+                                <input type="range" min="0" max="50" step="1" v-model.number="headerConfig.paragraphSpacing" class="w-full">
+                             </div>
                         </div>
                         <div class="grid grid-cols-2 gap-2">
                             <div>
@@ -192,33 +194,32 @@
                                 <input type="range" min="-50" max="50" v-model.number="headerConfig.offsetY" class="w-full">
                              </div>
                         </div>
-                        
-                        <!-- 快速配色方案 -->
                         <div>
-                            <label class="text-xs text-gray-500 block mb-1">推荐配色</label>
-                            <div class="flex gap-2">
-                                <button @click="applyColorPreset('#F5EBD0', '#7F011F')" class="w-8 h-8 rounded-full border border-gray-200 shadow-sm relative overflow-hidden group" title="Light Sand + Wine Red">
-                                    <div class="absolute inset-0 bg-[#F5EBD0]"></div>
-                                    <div class="absolute inset-0 bg-[#7F011F] transform translate-y-1/2"></div>
+                            <label class="text-xs text-gray-500 block mb-1">
+                                配色方案 
+                                <span class="text-[10px] text-gray-400 font-normal ml-1">(点击切换反色)</span>
+                            </label>
+                            <div class="flex flex-wrap gap-2 mb-2">
+                                <button v-for="preset in colorPresets" :key="preset.name" 
+                                        @click="applyColorPreset(preset)"
+                                        class="text-xs px-2 py-1 rounded border flex items-center gap-1 hover:opacity-80 transition-opacity shadow-sm"
+                                        :style="{ backgroundColor: preset.bg, color: preset.text, borderColor: '#e5e7eb' }">
+                                    {{ preset.name }}
                                 </button>
-                                <button @click="applyColorPreset('#C5D2F8', '#4F0C28')" class="w-8 h-8 rounded-full border border-gray-200 shadow-sm relative overflow-hidden group" title="Periwinkle + Dark Plum">
-                                    <div class="absolute inset-0 bg-[#C5D2F8]"></div>
-                                    <div class="absolute inset-0 bg-[#4F0C28] transform translate-y-1/2"></div>
-                                </button>
-                                <button @click="applyColorPreset('#ffffff', '#000000')" class="w-8 h-8 rounded-full border border-gray-200 shadow-sm relative overflow-hidden group" title="默认白黑">
-                                    <div class="absolute inset-0 bg-white"></div>
-                                    <div class="absolute inset-0 bg-black transform translate-y-1/2"></div>
+                                <button @click="generateRandomPalette" 
+                                        class="text-xs px-2 py-1 rounded border border-purple-200 bg-purple-50 text-purple-700 flex items-center gap-1 hover:bg-purple-100 transition-colors"
+                                        title="AI 生成随机和谐配色">
+                                    <i class="ph ph-magic-wand"></i> 随机灵感
                                 </button>
                             </div>
                         </div>
-
                         <div class="grid grid-cols-2 gap-2">
                             <div>
-                                <label class="text-xs text-gray-500 block mb-1">背景色</label>
+                                <label class="text-xs text-gray-500 block mb-1">背景色 (自定义)</label>
                                 <input type="color" v-model="headerConfig.bgColor" class="w-full h-7 p-0 border rounded cursor-pointer">
                             </div>
                              <div>
-                                <label class="text-xs text-gray-500 block mb-1">文字色</label>
+                                <label class="text-xs text-gray-500 block mb-1">文字色 (自定义)</label>
                                 <input type="color" v-model="headerConfig.textColor" class="w-full h-7 p-0 border rounded cursor-pointer">
                             </div>
                         </div>
@@ -232,7 +233,7 @@
                     <div class="flex justify-between items-center mb-2">
                         <h2 class="font-semibold text-sm text-gray-700">2. 拼接长图 (背景)</h2>
                         <button @click="triggerFileInput('bgInput')" class="text-blue-600 text-xs hover:underline flex items-center">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-1"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>添加图片
+                            <i class="ph ph-plus mr-1"></i>添加图片
                         </button>
                         <input type="file" id="bgInput" class="file-input" multiple accept="image/*" @change="handleBgUpload">
                     </div>
@@ -245,13 +246,13 @@
                             </div>
                             <div class="flex gap-1">
                                 <button @click="moveBg(index, -1)" :disabled="index === 0" class="p-1 hover:bg-gray-200 rounded disabled:opacity-30">
-                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
+                                    <i class="ph ph-arrow-up"></i>
                                 </button>
                                 <button @click="moveBg(index, 1)" :disabled="index === bgImages.length - 1" class="p-1 hover:bg-gray-200 rounded disabled:opacity-30">
-                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></svg>
+                                    <i class="ph ph-arrow-down"></i>
                                 </button>
                                 <button @click="removeBg(index)" class="p-1 hover:bg-red-100 text-red-500 rounded">
-                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                                    <i class="ph ph-trash"></i>
                                 </button>
                             </div>
                         </div>
@@ -268,7 +269,7 @@
                     <div class="flex justify-between items-center mb-2">
                         <h2 class="font-semibold text-sm text-gray-700">3. 贴纸/水印</h2>
                         <button @click="triggerFileInput('stickerInput')" class="text-blue-600 text-xs hover:underline flex items-center">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-1"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>添加贴纸
+                            <i class="ph ph-plus mr-1"></i>添加贴纸
                         </button>
                         <input type="file" id="stickerInput" class="file-input" accept="image/*" @change="handleStickerUpload">
                     </div>
@@ -292,7 +293,7 @@
                         </div>
                         <div class="flex justify-between pt-2">
                             <button @click="deleteSelected" class="text-red-500 text-xs flex items-center hover:underline">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-1"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg> 删除贴纸
+                                <i class="ph ph-trash mr-1"></i> 删除贴纸
                             </button>
                         </div>
                     </div>
@@ -374,7 +375,7 @@
                         </div>
                         <div class="flex justify-between pt-2">
                             <button @click="deleteSelected" class="text-red-500 text-xs flex items-center hover:underline">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-1"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg> 删除
+                                <i class="ph ph-trash mr-1"></i> 删除
                             </button>
                         </div>
                     </div>
@@ -386,7 +387,7 @@
             
             <div class="p-4 border-t border-gray-200 bg-gray-50">
                 <button @click="exportImage" class="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-lg font-medium flex items-center justify-center gap-2 shadow-sm transition-all active:scale-95">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-lg"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                    <i class="ph ph-download-simple text-lg"></i>
                     生成并保存图片
                 </button>
             </div>
@@ -422,23 +423,25 @@
                         
                         <!-- 0. 顶部标题栏 -->
                         <div v-if="headerConfig.show" 
-                             class="w-full flex flex-col justify-center px-6 shrink-0 box-border"
+                             class="w-full flex items-center justify-center px-4 text-center break-words shrink-0"
+                             :class="{'py-4': headerConfig.isAutoHeight}"
                              :style="{
-                                 height: headerConfig.height ? headerConfig.height + 'px' : 'auto',
-                                 minHeight: headerConfig.height ? 'auto' : '60px',
+                                 height: headerConfig.isAutoHeight ? 'auto' : headerConfig.height + 'px',
                                  backgroundColor: headerConfig.bgColor,
                                  color: headerConfig.textColor,
                                  fontSize: headerConfig.fontSize + 'px',
+                                 lineHeight: headerConfig.lineHeight,
                                  fontWeight: headerConfig.fontWeight,
                                  textAlign: headerConfig.textAlign,
-                                 fontFamily: headerConfig.fontFamily,
-                                 lineHeight: headerConfig.lineHeight,
-                                 paddingTop: '16px',
-                                 paddingBottom: '16px',
-                                 whiteSpace: 'pre-wrap'
+                                 whiteSpace: 'pre-wrap',
+                                 fontFamily: headerConfig.fontFamily
                              }">
-                             <div :style="{ transform: `translate(${headerConfig.offsetX || 0}px, ${headerConfig.offsetY || 0}px)` }" class="w-full">
-                                {{ headerConfig.text }}
+                             <div :style="{ transform: `translate(${headerConfig.offsetX || 0}px, ${headerConfig.offsetY || 0}px)` }">
+                                <div v-for="(paragraph, index) in headerConfig.text.split('\n')" 
+                                     :key="index"
+                                     :style="{ marginBottom: (index === headerConfig.text.split('\n').length - 1) ? '0' : headerConfig.paragraphSpacing + 'px', minHeight: '1em' }">
+                                    {{ paragraph }}
+                                </div>
                              </div>
                         </div>
 
@@ -446,8 +449,8 @@
                         <div class="flex flex-col w-full min-h-full bg-white flex-1">
                             <img v-for="img in bgImages" :key="img.id" :src="img.url" class="w-full block h-auto">
                             <!-- 如果没有背景图，显示占位 -->
-                            <div v-if="bgImages.length === 0 && !headerConfig.show" class="flex-1 flex items-center justify-center text-gray-300 flex-col gap-2" style="min-height: 400px;">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="text-4xl"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                            <div v-if="bgImages.length === 0 && !headerConfig.show" class="flex-1 flex items-center justify-center text-gray-300 flex-col gap-2 min-h-[400px]">
+                                <i class="ph ph-image text-4xl"></i>
                                 <span>添加背景图开始</span>
                             </div>
                         </div>
@@ -469,7 +472,7 @@
                 >
                     <!-- 删除按钮 (选中时显示) -->
                     <div v-if="selectedId === item.id" class="delete-btn" @click.stop="deleteItem(item.id)">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                        <i class="ph ph-x"></i>
                     </div>
 
                     <!-- 贴纸内容 -->
@@ -523,25 +526,70 @@
                 const canvasHeight = ref(667); // 初始高度
                 const headerConfig = ref({
                     show: false,
-                    text: '探店分享\n店名：星巴克\n推荐：拿铁',
-                    height: null, // null 表示自适应
+                    text: '探店分享',
+                    height: 60,
+                    isAutoHeight: true,
                     lineHeight: 1.5,
+                    paragraphSpacing: 10,
                     bgColor: '#ffffff',
                     textColor: '#000000',
-                    fontSize: 16,
-                    fontFamily: 'Noto Sans SC',
-                    textAlign: 'left',
-                    fontWeight: '400',
+                    fontSize: 16, // 默认字号 16
+                    fontFamily: '"WenJinMincho", serif', // 默认文津宋体
+                    textAlign: 'center',
+                    fontWeight: '300', // 默认极细
                     offsetX: 0,
                     offsetY: 0
                 });
 
-                // const addHeaderItem ... (removed)
-                // const removeHeaderItem ... (removed)
+                const colorPresets = [
+                    { name: '酒红/浅沙', bg: '#7F011F', text: '#F5EBD0' },
+                    { name: '深紫/长春花', bg: '#4F0C28', text: '#C5D2F8' },
+                    { name: '极简白黑', bg: '#FFFFFF', text: '#000000' },
+                    { name: '极简黑白', bg: '#000000', text: '#FFFFFF' }
+                ];
 
-                const applyColorPreset = (bgColor, textColor) => {
-                    headerConfig.value.bgColor = bgColor;
-                    headerConfig.value.textColor = textColor;
+                const applyColorPreset = (preset) => {
+                    // 如果当前已经是这个配色，则反转颜色
+                    if (headerConfig.value.bgColor === preset.bg && headerConfig.value.textColor === preset.text) {
+                        headerConfig.value.bgColor = preset.text;
+                        headerConfig.value.textColor = preset.bg;
+                    } else {
+                        // 否则应用默认顺序
+                        headerConfig.value.bgColor = preset.bg;
+                        headerConfig.value.textColor = preset.text;
+                    }
+                };
+
+                // 随机配色生成 (本地算法模拟 API)
+                const generateRandomPalette = () => {
+                    const hue = Math.floor(Math.random() * 360);
+                    // 生成高饱和度、低亮度的深色
+                    const darkColor = `hsl(${hue}, ${40 + Math.random() * 20}%, ${20 + Math.random() * 10}%)`;
+                    // 生成同色系或互补色的浅色
+                    const isComplementary = Math.random() > 0.5;
+                    const lightHue = isComplementary ? (hue + 180) % 360 : hue;
+                    const lightColor = `hsl(${lightHue}, ${20 + Math.random() * 30}%, ${85 + Math.random() * 10}%)`;
+
+                    // 随机决定谁是背景
+                    const isDarkBg = Math.random() > 0.5;
+                    const bg = isDarkBg ? darkColor : lightColor;
+                    const text = isDarkBg ? lightColor : darkColor;
+
+                    // 转换 HSL 为 Hex (因为 input type="color" 只支持 Hex)
+                    headerConfig.value.bgColor = hslToHex(bg);
+                    headerConfig.value.textColor = hslToHex(text);
+                };
+
+                // 辅助函数: HSL string -> Hex
+                const hslToHex = (hslStr) => {
+                    const [h, s, l] = hslStr.match(/\d+(\.\d+)?/g).map(Number);
+                    const a = s * Math.min(l, 100 - l) / 100;
+                    const f = n => {
+                        const k = (n + h / 30) % 12;
+                        const color = l - a * Math.max(Math.min(k - 3, 9 - k, 1), -1);
+                        return Math.round(255 * color / 100).toString(16).padStart(2, '0');
+                    };
+                    return `#${f(0)}${f(8)}${f(4)}`;
                 };
 
                 // 字体选项
@@ -905,9 +953,11 @@
                     triggerFileInput,
                     scale,
                     headerConfig,
-                    applyColorPreset,
                     fontOptions,
-                    hexToRgba
+                    hexToRgba,
+                    colorPresets,
+                    applyColorPreset,
+                    generateRandomPalette
                 };
             }
         }).mount('#app');
