@@ -2,9 +2,17 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
+    <script>
+        window.onerror = function(msg, url, line, col, error) {
+            // 忽略 ResizeObserver 循环限制错误
+            if (msg.includes('ResizeObserver loop limit exceeded')) return;
+            alert("系统检测到错误，请截图发给顾问：\n" + msg + "\n" + (url ? url.split('/').pop() : 'unknown') + " 第 " + line + " 行");
+        };
+    </script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>探店图文编辑器</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- 替换为静态 CSS 版本，移除对不稳定脚本的依赖 -->
+    <link href="https://cdn.staticfile.org/tailwindcss/2.2.19/tailwind.min.css" rel="stylesheet">
     <script src="https://cdn.staticfile.org/vue/3.3.4/vue.global.min.js"></script>
     <script src="https://cdn.staticfile.org/html2canvas/1.4.1/html2canvas.min.js"></script>
     <!-- 引入 Phosphor Icons -->
@@ -439,7 +447,7 @@
                         <div class="flex flex-col w-full min-h-full bg-white flex-1">
                             <img v-for="img in bgImages" :key="img.id" :src="img.url" class="w-full block h-auto">
                             <!-- 如果没有背景图，显示占位 -->
-                            <div v-if="bgImages.length === 0 && !headerConfig.show" class="flex-1 flex items-center justify-center text-gray-300 flex-col gap-2 min-h-[400px]">
+                            <div v-if="bgImages.length === 0 && !headerConfig.show" class="flex-1 flex items-center justify-center text-gray-300 flex-col gap-2" style="min-height: 400px;">
                                 <i class="ph ph-image text-4xl"></i>
                                 <span>添加背景图开始</span>
                             </div>
