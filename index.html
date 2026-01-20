@@ -5,10 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>探店图文编辑器</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
-    <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
+    <script src="https://cdn.staticfile.org/vue/3.3.4/vue.global.min.js"></script>
+    <script src="https://cdn.staticfile.org/html2canvas/1.4.1/html2canvas.min.js"></script>
     <!-- 引入 Phosphor Icons -->
-    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@phosphor-icons/web"></script>
     
     <!-- 引入 Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -130,7 +130,7 @@
                     <div v-if="headerConfig.show" class="bg-gray-50 p-3 rounded-lg border border-gray-200 space-y-3">
                          <div>
                             <label class="text-xs text-gray-500 block mb-1">标题内容 (支持回车换行)</label>
-                            <textarea v-model="headerConfig.text" rows="2" class="w-full text-sm p-1 border rounded"></textarea>
+                            <textarea v-model="headerConfig.text" rows="4" class="w-full text-sm p-1 border rounded"></textarea>
                         </div>
                         <div>
                             <label class="text-xs text-gray-500 block mb-1">字体</label>
@@ -142,13 +142,20 @@
                         </div>
                         <div class="grid grid-cols-2 gap-2">
                             <div>
-                                <label class="text-xs text-gray-500 block mb-1">高度 (px)</label>
-                                <input type="number" v-model.number="headerConfig.height" class="w-full text-sm p-1 border rounded">
+                                <label class="text-xs text-gray-500 block mb-1">高度 ({{ headerConfig.height ? headerConfig.height + 'px' : '自适应' }})</label>
+                                <div class="flex items-center gap-1">
+                                    <input type="range" min="30" max="300" v-model.number="headerConfig.height" class="flex-1" :disabled="!headerConfig.height" @input="if(!headerConfig.height) headerConfig.height = 100">
+                                    <button @click="headerConfig.height = null" class="text-xs px-1 py-0.5 bg-gray-200 rounded hover:bg-gray-300" title="重置为自适应">Auto</button>
+                                </div>
                             </div>
                             <div>
                                 <label class="text-xs text-gray-500 block mb-1">字号</label>
                                 <input type="number" v-model.number="headerConfig.fontSize" class="w-full text-sm p-1 border rounded">
                             </div>
+                        </div>
+                        <div>
+                             <label class="text-xs text-gray-500 block mb-1">行间距 ({{ headerConfig.lineHeight }})</label>
+                             <input type="range" min="1.0" max="3.0" step="0.1" v-model.number="headerConfig.lineHeight" class="w-full">
                         </div>
                         <div class="grid grid-cols-2 gap-2">
                             <div>
@@ -178,6 +185,26 @@
                                 <input type="range" min="-50" max="50" v-model.number="headerConfig.offsetY" class="w-full">
                              </div>
                         </div>
+                        
+                        <!-- 快速配色方案 -->
+                        <div>
+                            <label class="text-xs text-gray-500 block mb-1">推荐配色</label>
+                            <div class="flex gap-2">
+                                <button @click="applyColorPreset('#F5EBD0', '#7F011F')" class="w-8 h-8 rounded-full border border-gray-200 shadow-sm relative overflow-hidden group" title="Light Sand + Wine Red">
+                                    <div class="absolute inset-0 bg-[#F5EBD0]"></div>
+                                    <div class="absolute inset-0 bg-[#7F011F] transform translate-y-1/2"></div>
+                                </button>
+                                <button @click="applyColorPreset('#C5D2F8', '#4F0C28')" class="w-8 h-8 rounded-full border border-gray-200 shadow-sm relative overflow-hidden group" title="Periwinkle + Dark Plum">
+                                    <div class="absolute inset-0 bg-[#C5D2F8]"></div>
+                                    <div class="absolute inset-0 bg-[#4F0C28] transform translate-y-1/2"></div>
+                                </button>
+                                <button @click="applyColorPreset('#ffffff', '#000000')" class="w-8 h-8 rounded-full border border-gray-200 shadow-sm relative overflow-hidden group" title="默认白黑">
+                                    <div class="absolute inset-0 bg-white"></div>
+                                    <div class="absolute inset-0 bg-black transform translate-y-1/2"></div>
+                                </button>
+                            </div>
+                        </div>
+
                         <div class="grid grid-cols-2 gap-2">
                             <div>
                                 <label class="text-xs text-gray-500 block mb-1">背景色</label>
@@ -186,21 +213,6 @@
                              <div>
                                 <label class="text-xs text-gray-500 block mb-1">文字色</label>
                                 <input type="color" v-model="headerConfig.textColor" class="w-full h-7 p-0 border rounded cursor-pointer">
-                            </div>
-                        </div>
-
-                        <!-- 预设配色按钮 -->
-                        <div>
-                            <label class="text-xs text-gray-500 block mb-1">一键配色</label>
-                            <div class="flex gap-2 flex-wrap">
-                                <button v-for="(theme, index) in colorThemes" :key="index" 
-                                        @click="applyTheme(theme)"
-                                        class="px-2 py-1 text-xs border rounded flex items-center gap-1 hover:bg-gray-100 transition-colors"
-                                        :title="theme.label">
-                                    <span class="w-3 h-3 rounded-full border border-gray-300" :style="{ backgroundColor: theme.bg }"></span>
-                                    <span class="w-3 h-3 rounded-full border border-gray-300" :style="{ backgroundColor: theme.text }"></span>
-                                    {{ theme.label.split(' ')[0] }}
-                                </button>
                             </div>
                         </div>
                     </div>
@@ -401,40 +413,25 @@
                             transformOrigin: 'top left'
                         }">
                         
-                        <!-- 0. 顶部信息列表 (重构) -->
+                        <!-- 0. 顶部标题栏 -->
                         <div v-if="headerConfig.show" 
-                             class="w-full px-6 flex flex-col shrink-0"
+                             class="w-full flex flex-col justify-center px-6 shrink-0 box-border"
                              :style="{
-                                 paddingTop: headerConfig.padding + 'px',
-                                 paddingBottom: headerConfig.padding + 'px',
+                                 height: headerConfig.height ? headerConfig.height + 'px' : 'auto',
+                                 minHeight: headerConfig.height ? 'auto' : '60px',
                                  backgroundColor: headerConfig.bgColor,
                                  color: headerConfig.textColor,
+                                 fontSize: headerConfig.fontSize + 'px',
+                                 fontWeight: headerConfig.fontWeight,
+                                 textAlign: headerConfig.textAlign,
                                  fontFamily: headerConfig.fontFamily,
-                                 gap: (headerConfig.gap || 8) + 'px'
+                                 lineHeight: headerConfig.lineHeight,
+                                 paddingTop: '16px',
+                                 paddingBottom: '16px',
+                                 whiteSpace: 'pre-wrap'
                              }">
-                             <!-- 列表项渲染 -->
-                             <div v-for="(item, index) in headerConfig.list" :key="index" class="flex items-start w-full">
-                                 <!-- 标题列 (固定宽 + 右对齐) -->
-                                 <div class="shrink-0 flex justify-between pr-3 font-bold opacity-80"
-                                      :style="{ 
-                                          width: headerConfig.labelWidth + 'px',
-                                          fontSize: headerConfig.fontSize + 'px',
-                                          fontWeight: headerConfig.fontWeight
-                                      }">
-                                     <span>{{ item.label }}</span>
-                                     <!-- 冒号可以作为伪元素或直接写，这里直接写为了对齐 -->
-                                     <span>:</span>
-                                 </div>
-                                 
-                                 <!-- 内容列 (自适应 + 换行) -->
-                                 <div class="flex-1 break-words whitespace-pre-wrap"
-                                      :style="{ 
-                                          fontSize: headerConfig.fontSize + 'px',
-                                          fontWeight: headerConfig.fontWeight,
-                                          lineHeight: headerConfig.lineHeight || 1.5
-                                      }">
-                                     {{ item.value }}
-                                 </div>
+                             <div :style="{ transform: `translate(${headerConfig.offsetX || 0}px, ${headerConfig.offsetY || 0}px)` }" class="w-full">
+                                {{ headerConfig.text }}
                              </div>
                         </div>
 
@@ -519,32 +516,25 @@
                 const canvasHeight = ref(667); // 初始高度
                 const headerConfig = ref({
                     show: false,
-                    list: [
-                        { label: '店名', value: '填写店名' },
-                        { label: '人均', value: '¥50' }
-                    ],
+                    text: '探店分享\n店名：星巴克\n推荐：拿铁',
+                    height: null, // null 表示自适应
+                    lineHeight: 1.5,
                     bgColor: '#ffffff',
                     textColor: '#000000',
                     fontSize: 16,
                     fontFamily: 'Noto Sans SC',
+                    textAlign: 'left',
                     fontWeight: '400',
-                    labelWidth: 60, // 标签列宽
-                    gap: 12,        // 间距
-                    lineHeight: 1.5,
-                    padding: 20
+                    offsetX: 0,
+                    offsetY: 0
                 });
 
-                // 预设配色方案
-                const colorThemes = [
-                    { label: '默认白黑', bg: '#ffffff', text: '#000000' },
-                    { label: '红酒沙色 (Wine Red)', bg: '#F5EBD0', text: '#7F011F' },
-                    { label: '暗紫长春花 (Dark Plum)', bg: '#C5D2F8', text: '#4F0C28' }
-                ];
+                // const addHeaderItem ... (removed)
+                // const removeHeaderItem ... (removed)
 
-                // 应用配色方案
-                const applyTheme = (theme) => {
-                    headerConfig.value.bgColor = theme.bg;
-                    headerConfig.value.textColor = theme.text;
+                const applyColorPreset = (bgColor, textColor) => {
+                    headerConfig.value.bgColor = bgColor;
+                    headerConfig.value.textColor = textColor;
                 };
 
                 // 字体选项
@@ -908,10 +898,9 @@
                     triggerFileInput,
                     scale,
                     headerConfig,
+                    applyColorPreset,
                     fontOptions,
-                    hexToRgba,
-                    colorThemes,
-                    applyTheme
+                    hexToRgba
                 };
             }
         }).mount('#app');
