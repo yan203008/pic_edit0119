@@ -401,21 +401,40 @@
                             transformOrigin: 'top left'
                         }">
                         
-                        <!-- 0. 顶部标题栏 -->
+                        <!-- 0. 顶部信息列表 (重构) -->
                         <div v-if="headerConfig.show" 
-                             class="w-full flex items-center justify-center px-4 text-center break-words shrink-0"
+                             class="w-full px-6 flex flex-col shrink-0"
                              :style="{
-                                 height: headerConfig.height + 'px',
+                                 paddingTop: headerConfig.padding + 'px',
+                                 paddingBottom: headerConfig.padding + 'px',
                                  backgroundColor: headerConfig.bgColor,
                                  color: headerConfig.textColor,
-                                 fontSize: headerConfig.fontSize + 'px',
-                                 fontWeight: headerConfig.fontWeight,
-                                 textAlign: headerConfig.textAlign,
-                                 whiteSpace: 'pre-wrap',
-                                 fontFamily: headerConfig.fontFamily
+                                 fontFamily: headerConfig.fontFamily,
+                                 gap: (headerConfig.gap || 8) + 'px'
                              }">
-                             <div :style="{ transform: `translate(${headerConfig.offsetX || 0}px, ${headerConfig.offsetY || 0}px)` }">
-                                {{ headerConfig.text }}
+                             <!-- 列表项渲染 -->
+                             <div v-for="(item, index) in headerConfig.list" :key="index" class="flex items-start w-full">
+                                 <!-- 标题列 (固定宽 + 右对齐) -->
+                                 <div class="shrink-0 flex justify-between pr-3 font-bold opacity-80"
+                                      :style="{ 
+                                          width: headerConfig.labelWidth + 'px',
+                                          fontSize: headerConfig.fontSize + 'px',
+                                          fontWeight: headerConfig.fontWeight
+                                      }">
+                                     <span>{{ item.label }}</span>
+                                     <!-- 冒号可以作为伪元素或直接写，这里直接写为了对齐 -->
+                                     <span>:</span>
+                                 </div>
+                                 
+                                 <!-- 内容列 (自适应 + 换行) -->
+                                 <div class="flex-1 break-words whitespace-pre-wrap"
+                                      :style="{ 
+                                          fontSize: headerConfig.fontSize + 'px',
+                                          fontWeight: headerConfig.fontWeight,
+                                          lineHeight: headerConfig.lineHeight || 1.5
+                                      }">
+                                     {{ item.value }}
+                                 </div>
                              </div>
                         </div>
 
@@ -500,16 +519,19 @@
                 const canvasHeight = ref(667); // 初始高度
                 const headerConfig = ref({
                     show: false,
-                    text: '探店分享',
-                    height: 60,
-                    bgColor: '#F5EBD0',
-                    textColor: '#7F011F',
-                    fontSize: 18,
+                    list: [
+                        { label: '店名', value: '填写店名' },
+                        { label: '人均', value: '¥50' }
+                    ],
+                    bgColor: '#ffffff',
+                    textColor: '#000000',
+                    fontSize: 16,
                     fontFamily: 'Noto Sans SC',
-                    textAlign: 'center',
-                    fontWeight: '700',
-                    offsetX: 0,
-                    offsetY: 0
+                    fontWeight: '400',
+                    labelWidth: 60, // 标签列宽
+                    gap: 12,        // 间距
+                    lineHeight: 1.5,
+                    padding: 20
                 });
 
                 // 预设配色方案
